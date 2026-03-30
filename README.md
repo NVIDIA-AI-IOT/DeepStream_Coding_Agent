@@ -255,6 +255,16 @@ Create the FastAPI server with all endpoints shown in @rtvi_vlm_openapi_spec.png
 
 ---
 
+## Demo Video
+
+<a href="https://www.youtube.com/watch?v=ZQTX7MeN7mI" target="_blank" rel="noopener noreferrer">
+  <picture>
+    <img src="https://img.youtube.com/vi/ZQTX7MeN7mI/maxresdefault.jpg" alt="Build Vision AI Pipelines with DeepStream Coding Agents" width="560" style="border-radius:8px">
+  </picture>
+</a>
+
+---
+
 ## Additional Resources
 
 - [NVIDIA DeepStream SDK Developer Guide](https://docs.nvidia.com/metropolis/deepstream/dev-guide/)
