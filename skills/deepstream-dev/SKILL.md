@@ -154,6 +154,7 @@ DeepStream uses NVIDIA Video Memory Manager (NVMM) for zero-copy GPU buffer tran
 | [references/tracker_config.md](references/tracker_config.md) | nvtracker config, NvDCF/IOU/DeepSORT/NvSORT |
 | [references/troubleshooting.md](references/troubleshooting.md) | Error messages and solutions |
 | [references/rest_api_dynamic.md](references/rest_api_dynamic.md) | REST API, dynamic source add/remove, nvmultiurisrcbin |
+| [references/metamux_config.md](references/metamux_config.md) | nvdsmetamux config, parallel multi-model inference, metadata merging, source ID filtering |
 | [references/docker_containers.md](references/docker_containers.md) | Docker images, Dockerfile examples, pyservicemaker install, container run commands |
 
 ## Quick Error Reference

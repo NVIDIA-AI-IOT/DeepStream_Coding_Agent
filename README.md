@@ -76,6 +76,7 @@ This skill targets NVIDIA DeepStream SDK 9.0 development using the Python `pyser
 | `tracker_config.md` | nvtracker config (NvDCF, IOU, DeepSORT, NvSORT) |
 | `troubleshooting.md` | Error messages and solutions |
 | `rest_api_dynamic.md` | REST API, dynamic source management |
+| `metamux_config.md` | nvdsmetamux config, parallel multi-model inference, metadata merging |
 | `docker_containers.md` | Docker images, Dockerfile examples, pyservicemaker install, container run commands |
 
 ### Installing the Skill
@@ -130,6 +131,7 @@ After copying, the directory structure should look like:
         ├── troubleshooting.md
         ├── use_cases_pipelines.md
         ├── utilities_config.md
+        ├── metamux_config.md
         └── docker_containers.md
 ```
 
@@ -162,6 +164,7 @@ The `example_prompts/` directory contains pre-built prompts for generating DeepS
 | `rtvi_vlm_openapi_spec.md` | FastAPI microservice with OpenAPI specification. Should be used after the core app is generated using @rtvi_vlm_core_app.md |
 | `video_infer_app.md` | Basic video file inference with bounding box display |
 | `video_object_count.md` | Video inference with object detection counting |
+| `video_parallel_infer_app.md` | Parallel multi-model inference with demux stream selection and metadata merging |
 | `yolov26s_detection.md` | YOLOv26s model download, ONNX export, and custom parsing library |
 
 ---
