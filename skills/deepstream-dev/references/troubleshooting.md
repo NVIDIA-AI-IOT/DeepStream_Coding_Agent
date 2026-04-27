@@ -953,14 +953,14 @@ pipeline.add("nvmultiurisrcbin", "src", {
 })
 ```
 
-See `18_rest_api_dynamic_sources.md` for complete REST API documentation.
+See `rest_api_dynamic.md` for complete REST API documentation.
 
 ---
 
 ## Related Documentation
 
-- **GStreamer Plugins Overview**: `02_gstreamer_plugins_overview.md`
-- **Service Maker Python API**: `03_service_maker_python_api.md`
-- **Best Practices**: `07_best_practices_patterns.md`
-- **nvinfer Configuration**: `14_nvinfer_configuration_reference.md`
-- **Tracker Configuration**: `15_tracker_configuration_reference.md`
+- **GStreamer Plugins Overview**: `gstreamer_plugins.md`
+- **Service Maker Python API**: `service_maker_api.md`
+- **Best Practices**: `best_practices.md`
+- **nvinfer Configuration**: `nvinfer_config.md`
+- **Tracker Configuration**: `tracker_config.md`

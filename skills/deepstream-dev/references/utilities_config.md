@@ -1477,10 +1477,10 @@ else:
 
 ## Related APIs
 
-- **Pipeline API**: See `03_service_maker_python_api.md`
-- **Flow API**: See `03_service_maker_python_api.md`
-- **Postprocessing**: See `03_service_maker_python_api.md`
-- **Smart Recording**: See `06_use_case_kafka_integration.md`
+- **Pipeline API**: See `service_maker_api.md`
+- **Flow API**: See `service_maker_api.md`
+- **Postprocessing**: See `service_maker_api.md`
+- **Smart Recording**: See `service_maker_api.md` and `kafka_messaging.md`
 
 ## Configuration and Helper Summary
 

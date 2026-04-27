@@ -385,7 +385,7 @@ Common RTSP URL formats by manufacturer:
 
 ## Related Documentation
 
-- **GStreamer Plugins**: `02_gstreamer_plugins_overview.md`
-- **Service Maker API**: `03_service_maker_python_api.md`
-- **Troubleshooting**: `16_common_errors_troubleshooting.md`
-- **Configuration Classes**: `12_configuration_and_helper_classes.md`
+- **GStreamer Plugins**: `gstreamer_plugins.md`
+- **Service Maker API**: `service_maker_api.md`
+- **Troubleshooting**: `troubleshooting.md`
+- **Configuration Classes**: `utilities_config.md`

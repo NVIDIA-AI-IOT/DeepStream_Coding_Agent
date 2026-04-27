@@ -1839,5 +1839,5 @@ tail -f /tmp/nvds/ds.log
 
 ## Related Documentation
 
-- **GStreamer Plugins Overview**: `02_gstreamer_plugins_overview.md`
-- **Service Maker Python API**: `03_service_maker_python_api.md`
+- **GStreamer Plugins Overview**: `gstreamer_plugins.md`
+- **Service Maker Python API**: `service_maker_api.md`

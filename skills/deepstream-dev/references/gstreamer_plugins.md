@@ -128,7 +128,7 @@ pipeline.add("nveglglessink", "sink", {
 **Notes**:
 - Integrates nvds_rest_server, nvurisrcbin, and nvstreammux in one bin
 - Do NOT implement custom Flask/FastAPI server - use built-in REST API
-- See `18_rest_api_dynamic_sources.md` for complete REST API documentation
+- See `rest_api_dynamic.md` for complete REST API documentation
 
 ---
 

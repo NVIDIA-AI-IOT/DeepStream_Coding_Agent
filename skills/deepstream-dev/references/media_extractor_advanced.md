@@ -885,9 +885,9 @@ Process multiple synchronized video sources in batches.
 
 ## Related APIs
 
-- **BufferProvider/Feeder**: See `08_media_extractor_buffer_provider.md`
-- **BufferRetriever/Receiver**: See `09_frame_selector_buffer_retriever.md`
-- **Pipeline API**: See `03_service_maker_python_api.md`
+- **BufferProvider/Feeder**: See `buffer_apis.md`
+- **BufferRetriever/Receiver**: See `buffer_apis.md`
+- **Pipeline API**: See `service_maker_api.md`
 
 ## Summary
 
