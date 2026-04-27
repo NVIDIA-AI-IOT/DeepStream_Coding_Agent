@@ -1,4 +1,4 @@
-Use DeepStream SDK pyservicemake APIs to develop the python application that can do the following.
+Use DeepStream SDK pyservicemaker APIs to develop the python application that can do the following.
 - Read from files, decode the videos and infer using ResNet18 model.
 - display the bounding box around detected objects using OSD.
 - Use nvdsanalytics to do ROI filtering, line-crossing, overcrowding, and direction-detection analysis

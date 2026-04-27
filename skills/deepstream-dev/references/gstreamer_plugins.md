@@ -132,6 +132,31 @@ pipeline.add("nveglglessink", "sink", {
 
 ---
 
+### nvdsdynamicsrcbin
+**Purpose**: Source bin for programmatically adding and removing file/URI-based video sources at runtime. Unlike `nvmultiurisrcbin` (REST API / config-driven), `nvdsdynamicsrcbin` is controlled entirely through code using `SourceManager`.
+
+**CRITICAL**: `nvdsdynamicsrcbin` does **not** manage sources on its own. You **must** use `SourceManager` from `pyservicemaker._pydeepstream.signal` to add, remove, and terminate sources. Without `SourceManager`, the bin has no way to receive source URIs.
+
+**Key Properties**:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `gpu-id` | uint | 0 | GPU Device ID to use for decoding |
+| `message-forward` | bool | False | Forward all children messages to the pipeline bus (required for EOS detection) |
+| `async-handling` | bool | False | Handle asynchronous state changes internally |
+| `current-file` | string (read-only) | null | Currently processing file path |
+| `current-id` | int (read-only) | -1 | ID of the chunk currently being processed |
+
+**Element Actions** (triggered via `SourceManager`):
+| Action | Description |
+|--------|-------------|
+| `add-source` | Add a new file/URI source to the bin |
+| `remove-source` | Remove a source by its unique ID |
+| `terminate` | Signal no more sources will be added; sends EOS after all finish |
+
+**Internal Children**: Contains `parsebin`, `queue_parsebin`, and `decoder` — it automatically parses and decodes the added sources.
+
+---
+
 ### v4l2src
 **Purpose**: Video4Linux2 source for USB cameras
 
@@ -858,6 +883,8 @@ tee name=t t. ! queue ! ... t. ! queue ! ...
 ### For Video Sources:
 - **Files**: `nvurisrcbin` or `filesrc` + `qtdemux` + `h264parse`
 - **RTSP Streams**: `nvurisrcbin` with `rtsp://` URI
+- **Dynamic sources (REST API)**: `nvmultiurisrcbin` — config/REST-driven multi-stream
+- **Dynamic sources (programmatic)**: `nvdsdynamicsrcbin` + `SourceManager` — script-driven add/remove
 - **USB Cameras**: `v4l2src`
 - **Jetson CSI Cameras**: `nvarguscamerasrc`
 

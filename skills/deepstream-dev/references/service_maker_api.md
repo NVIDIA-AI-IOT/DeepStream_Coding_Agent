@@ -795,16 +795,20 @@ objects = converter(output_layers)
 
 Wrapper for attaching callback functions to pipeline elements.
 
-**Constructor**:
+**Constructor** (two overloads):
 ```python
 from pyservicemaker import Probe
 
+# Overload 1: Metadata-level probe (most common)
 probe = Probe("probe-name", BatchMetadataOperator())
+
+# Overload 2: Buffer-level probe (for raw buffer access)
+probe = Probe("probe-name", BufferOperator())
 ```
 
 **Parameters**:
 - `name` (str): Name of the probe
-- `operator`: BatchMetadataOperator instance
+- `operator`: `BatchMetadataOperator` instance **or** `BufferOperator` instance
 
 **Built-in Probes**:
 - `"measure_fps_probe"`: Measures FPS
@@ -821,6 +825,43 @@ pipeline.attach("infer", "measure_fps_probe", "fps-probe")
 
 # Built-in message meta probe (for Kafka with msg2p-newapi=0)
 pipeline.attach("osd", "add_message_meta_probe", "metadata generator")
+```
+
+### BufferOperator Class
+
+Low-level probe interface for accessing raw `Buffer` objects flowing through a pad. Use `BufferOperator` instead of `BatchMetadataOperator` when you need to inspect or count raw buffers that do NOT carry batch metadata — e.g., on the `src` pad of `nvdsdynamicsrcbin` (before any `nvstreammux`).
+
+**Methods to Override**:
+
+##### `handle_buffer(buffer)`
+Called for every buffer that passes through the probed pad.
+
+**Parameters**:
+- `buffer` (Buffer): The buffer flowing through the pad
+
+**Returns**: `bool` — `True` to pass the buffer downstream (keep), `False` to drop it.
+
+**Buffer Object Properties/Methods** (available inside `handle_buffer`):
+- `buffer.timestamp` (int): PTS timestamp of the buffer
+- `buffer.get_chunk_id(batch_id)` (int): Chunk/source ID assigned by `nvdsdynamicsrcbin`. Always 0 for `uridecodebin`.
+- `buffer.extract(batch_id)` → `Tensor`: Extract frame data as a tensor
+
+**Example**:
+```python
+from pyservicemaker import Pipeline, Probe, BufferOperator
+
+class MyBufferProbe(BufferOperator):
+    def __init__(self):
+        super().__init__()
+        self.count = 0
+
+    def handle_buffer(self, buffer):
+        self.count += 1
+        print(f"Buffer #{self.count}  ts={buffer.timestamp}")
+        return True
+
+probe = MyBufferProbe()
+pipeline.attach("dynamicsrcbin", Probe("buf-probe", probe), tips="src")
 ```
 
 ---
@@ -1567,6 +1608,86 @@ def on_message(message):
 pipeline.prepare(on_message)
 pipeline.activate()
 pipeline.wait()
+```
+
+---
+
+## SourceManager API (nvdsdynamicsrcbin)
+
+`SourceManager` is a `SignalEmitter` that dynamically adds and removes sources on `nvdsdynamicsrcbin` at runtime. Unlike `nvmultiurisrcbin` (which uses REST API / config-based management), `SourceManager` gives direct programmatic control over individual file/URI sources through signal actions.
+
+### Import
+
+```python
+from pyservicemaker._pydeepstream.signal import SourceManager
+```
+
+### Class: SourceManager
+
+Inherits from `signal.Emitter` → `Object`.
+
+**Constructor**:
+```python
+source_mgr = SourceManager("source_manager")
+```
+
+**Parameters**:
+- `name` (str): Name of the SourceManager instance
+
+### Methods
+
+#### `attach(action_name, element)`
+Attach the SourceManager to a pipeline element for a given action. Must be called for each action before using it.
+
+**Supported actions**:
+- `"add-source"` — enables `add_source()`
+- `"remove-source"` — enables `remove_source()`
+- `"terminate"` — enables `terminate()`
+
+**Parameters**:
+- `action_name` (str): One of `"add-source"`, `"remove-source"`, `"terminate"`
+- `element`: The pipeline element (Node) to attach to — must be an `nvdsdynamicsrcbin`
+
+**Example**:
+```python
+dsb_node = pipeline["dynamicsrcbin"]
+source_mgr.attach("add-source", dsb_node)
+source_mgr.attach("remove-source", dsb_node)
+source_mgr.attach("terminate", dsb_node)
+```
+
+#### `add_source(source_name)`
+Add a source (file path or URI) to the `nvdsdynamicsrcbin`.
+
+**Parameters**:
+- `source_name` (str): File path or URI of the source to add
+
+**Returns**: `int` — a unique source ID (>= 0), or `-1` if the add failed
+
+**Example**:
+```python
+sid = source_mgr.add_source("/path/to/video.h264")
+if sid < 0:
+    print("Failed to add source")
+```
+
+#### `remove_source(source_id)`
+Remove a previously added source by its ID.
+
+**Parameters**:
+- `source_id` (int): The unique ID returned by `add_source()`
+
+**Example**:
+```python
+source_mgr.remove_source(sid)
+```
+
+#### `terminate()`
+Signal that no more sources will be added. After all currently queued sources finish processing, an EOS (End of Stream) is sent downstream.
+
+**Example**:
+```python
+source_mgr.terminate()
 ```
 
 ---

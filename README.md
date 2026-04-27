@@ -166,6 +166,7 @@ The `example_prompts/` directory contains pre-built prompts for generating DeepS
 | `video_object_count.md` | Video inference with object detection counting |
 | `video_parallel_infer_app.md` | Parallel multi-model inference with demux stream selection and metadata merging |
 | `yolov26s_detection.md` | YOLOv26s model download, ONNX export, and custom parsing library |
+| `nvdsdynamicsrcbin_app.md` | Use of nvdsdynamicsrcbin plugin |
 
 ---
 
