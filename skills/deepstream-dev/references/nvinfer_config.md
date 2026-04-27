@@ -200,6 +200,15 @@ property:
   cluster-mode: 2  # NMS
 ```
 
+> **Oriented bounding boxes (OBB) — `rotation_angle`:** `nvinfer` supports oriented bounding boxes via `NvDsInferObjectDetectionInfo.rotation_angle`. **If you are using an OBB model**, the angle output by the model can be **directly assigned** to `rotation_angle` in your custom bbox parser. **If you are not using an OBB model**, set `rotation_angle = 0`. In C++, `NvDsInferObjectDetectionInfo obj{};` value-initializes the struct and zero-initializes all fields, including `rotation_angle`; plain `NvDsInferObjectDetectionInfo obj;` does **not** and can leave rotated-box metadata uninitialized.
+>
+> Example (C++):
+> ```cpp
+> NvDsInferObjectDetectionInfo obj{};
+> // ... fill classId, confidence, left/top/width/height ...
+> obj.rotation_angle = is_obb_model ? angle_from_model : 0.0f;
+> ```
+
 ### Secondary GIE Configuration (process-mode: 2)
 
 | Parameter | Type | Description | Default |
