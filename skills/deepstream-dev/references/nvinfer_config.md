@@ -641,7 +641,7 @@ Before running your pipeline, verify:
 
 ## Related Documentation
 
-- **GStreamer Plugins Overview**: `02_gstreamer_plugins_overview.md`
-- **Service Maker Python API**: `03_service_maker_python_api.md`
-- **Multi-Inference Use Case**: `05_use_case_multi_inference.md`
-- **Best Practices**: `07_best_practices_patterns.md`
+- **GStreamer Plugins Overview**: `gstreamer_plugins.md`
+- **Service Maker Python API**: `service_maker_api.md`
+- **Use Cases & Pipelines**: `use_cases_pipelines.md`
+- **Best Practices**: `best_practices.md`

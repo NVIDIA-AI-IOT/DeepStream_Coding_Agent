@@ -168,6 +168,7 @@ The `example_prompts/` directory contains pre-built prompts for generating DeepS
 | `yolov26s_detection.md` | YOLOv26s model download, ONNX export, and custom parsing library |
 | `nvdsdynamicsrcbin_app.md` | Use of nvdsdynamicsrcbin plugin |
 | `msgconv_kafka.md` | Video inference with message converter sending detection results to Kafka |
+| `single_view_3d_tracker.md` | The single-view 3D tracking. Given the camera matrix and human model of a static camera, estimates and keeps tracking of object states in the 3D physical world |
 
 ---
 
