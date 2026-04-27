@@ -112,13 +112,17 @@ pipeline.link((f"src{i}", "mux"), ("", f"sink_{i}"))  # INCORRECT - will fail!
 pipeline.link((f"src{i}", "mux"), ("", "sink_0"))     # INCORRECT - pad doesn't exist!
 ```
 
-##### `attach(element_name, probe, probe_name=None)`
-Attach a probe (callback function) to an element's pad.
+##### `attach(target, what, name='', tips='', properties=None)`
+Attach a probe (or other custom object) to a named element in the pipeline.
 
 **Parameters**:
-- `element_name` (str): Name of the element to attach probe to
-- `probe`: Probe instance or probe name string
-- `probe_name` (str, optional): Name for the probe
+- `target` (str): Name of the pipeline element to attach to
+- `what`: Probe instance or name of a built-in probe module (e.g. `"measure_fps_probe"`)
+- `name` (str, optional): Name for the probe. Not needed when `what` is an explicitly created Probe object.
+- `tips` (str, optional): Extra information for the custom object
+- `properties` (dict, optional): Properties to set on the object. Not applicable for explicitly created Probe objects.
+
+**CRITICAL**: The parameter is **`name`**, NOT `probe_name`. Using `probe_name` will raise `TypeError`.
 
 **Returns**: Pipeline instance (for method chaining)
 
@@ -132,8 +136,8 @@ class MyProbe(BatchMetadataOperator):
         pass
 
 pipeline.attach("infer", Probe("my-probe", MyProbe()))
-# Or attach built-in probe
-pipeline.attach("infer", "measure_fps_probe", "fps-probe")
+# Or attach built-in probe by module name, giving it a name
+pipeline.attach("infer", "measure_fps_probe", name="fps-probe")
 ```
 
 ##### `start()`
@@ -243,11 +247,70 @@ flow = Flow(pipeline)
 
 **Methods**:
 
-##### `batch_capture(sources)`
+##### `batch_capture(sources, record_config=None, **kwargs)`
 Configure batch capture from multiple sources.
 
 **Parameters**:
 - `sources` (list): List of source file paths or URIs
+- `record_config` (class RecordConfig): Optional smart recording (see full table in **`record_config` details** section below). If **`None`**, no smart recording is configured on sources. 
+- `kwargs` (dict): Optional overrides merged into mux and/or source properties (see **`kwargs` dict details** section below). 
+
+**`record_config` details**:
+RecordConfig instance should be constructed as description in **`record_config` Construction examples** section. The following RecordConfig fields can be used to configure smart recording.
+| Field | Type | Default | Used when | Meaning |
+|-------|------|---------|-----------|---------|
+| **`recording_type`** | **str** | **`"local"`** | Always | **`"local"`** or **`"cloud"`** (case-insensitive check in validation). |
+| **`proto_lib`** | **Optional[str]** | **`None`** | **`recording_type == "cloud"`** (required) | Path to the protocol library (e.g. Kafka proto **`libnvds_kafka_proto.so`**). Set on the smart-recording controller as **`proto-lib`**. |
+| **`conn_str`** | **Optional[str]** | **`None`** | Cloud (required) | Broker connection string (e.g. **`"localhost;9092"`**). Property **`conn-str`**. |
+| **`msgconv_config_file`** | **Optional[str]** | **`None`** | Cloud (required) | Message converter config file path. Property **`msgconv-config-file`**. |
+| **`proto_config_file`** | **Optional[str]** | **`None`** | Cloud (required) | Protocol adaptor config file path. Property **`proto-config-file`**. |
+| **`topic_list`** | **Optional[str]** | **`None`** | Cloud (required) | Comma-separated topic list. Property **`topic-list`**. |
+| **`rec_cache`** | **int** | **20** | **`record_config` is set** | Maps to **`smart-rec-cache`** on each source (cache size in seconds). |
+| **`rec_container`** | **int** | **0** | **`record_config` is set** | Maps to **`smart-rec-container`** (**0**: MP4, **1**: MKV). |
+| **`rec_dir_path`** | **str** | **`"."`** | **`record_config` is set** | Maps to **`smart-rec-dir-path`** (output directory for recordings). |
+| **`rec_mode`** | **int** | **0** | **`record_config` is set** | Maps to **`smart-rec-mode`**. Docstring: **0** both, **1** video-only, **2** audio-only. |
+
+**`record_config` Construction examples**:
+```python
+from pyservicemaker import RecordConfig
+
+# Local smart recording (minimal)
+rec_local = RecordConfig()  # recording_type defaults to "local"
+
+# Local with explicit paths and cache
+rec_local = RecordConfig(
+    recording_type="local",
+    rec_cache=20,
+    rec_container=0,
+    rec_dir_path="/data/recordings",
+    rec_mode=0,
+)
+
+# Cloud smart recording (all cloud fields required)
+rec_cloud = RecordConfig(
+    recording_type="cloud",
+    proto_lib="/path/to/broker_library.so",
+    conn_str="localhost;9092",
+    msgconv_config_file="/path/to/dstest5_msgconv_sample_config.txt",
+    proto_config_file="/path/to/cfg_kafka.txt",
+    topic_list="sr-test",
+    rec_cache=20,
+    rec_dir_path=".",
+    rec_mode=0,
+)
+```
+
+**`kwargs` dict details**:
+Any matching **hyphenated** name in the merged **`kwargs`** dict overrides the default value of the corresponding property, the following keys are supported:
+- `gpu_id` (int): Used as the `gpu-id` property of **`nvstreammux`** and as `gpu-id` on each **`nvurisrcbin`**.
+- `width` (int): Used as the `width` property of **`nvstreammux`**, default value is 1920.
+- `height` (int): Used as the `height` property of **`nvstreammux`**, default value is 1080.
+- `batch_size` (int): Used as the `batch-size` property of **`nvstreammux`**, default value is the number of URIs (if non-empty).
+- `batched_push_timeout` (int): Used as the `batched-push-timeout` property of **`nvstreammux`**, default value is 33000.
+- `buffer_pool_size` (int): Used as the `buffer-pool-size` property of **`nvstreammux`**, default value is 4.
+- `drop_pipeline_eos` (bool): Used as the `drop-pipeline-eos` property of **`nvstreammux`**, default value is False.
+- `live_source` (bool): Used as the `live-source` property of **`nvstreammux`**, default value is False.
+- `file_loop`(bool): Used as the `file-loop` property of **`nvstreammux`**, default value is False.
 
 **Returns**: Flow instance (for method chaining)
 
@@ -258,25 +321,45 @@ flow.batch_capture([
     "/path/to/video2.h264",
     "rtsp://camera-ip/stream"
 ])
-```
 
-##### `infer(config_file_path)`
+# Mux resolution and batching setting
+flow.batch_capture(uris, width=1280, height=720, batch_size=4)
+
+# GPU and file loop for file sources
+flow.batch_capture(uris, gpu_id=0, file_loop=True)
+
+# Combine with YAML: kwargs override missing keys from source-config.properties
+flow.batch_capture("/path/to/sources.yaml", width=1920, height=1080, live_source=True)
+```
+**Important**:
+`batch_capture` function sets the nvstreammux batch-size according to the input stream number by default, it is not necessary to set 'batch-size' with `batch_capture` unless you want to support dynamic source adding/removing.
+
+
+##### `infer(config_file_path, with_triton, **kwargs)`
 Add inference stage to the pipeline.
 
 **Parameters**:
 - `config_file_path` (str): Path to inference configuration file
+- `with_triton` (bool): If **`False`** (default), adds **`nvinfer`**. If **`True`**, adds **`nvinferserver`** for Triton-based inference.
+- `kwargs` (dict): Optional properties passed to gst-nvinfer or gst-nvinferserver plugin of DeepStream. Underscores in keyword names are converted to hyphens for GStreamer properties (e.g. **`batch_size`** → **`batch-size`**). Common overrides include **`batch_size`**, **`unique_id`**, **`model_engine_file`**, **`gpu_id`**, and other keys supported by **nvinfer** / **nvinferserver** for your install.
 
 **Returns**: Flow instance (for method chaining)
 
-**Example**:
+**Notes**: For multiple streams inferencing case, `batch_size` property should be set as the same value as the stream number.
+
+**Examples**:
 ```python
 flow.infer("/path/to/pgie_config.yml")
+
+#set nvinfer/nvinferserver properties with Flow.infer function
+flow.infer("/path/to/pgie_config.yml",unique_id=5, batch_size=4)
 ```
 
-##### `track(properties)`
+##### `track(**kwargs)`
 Add tracker for object tracking. Must be used after primary inference.
 
 **Parameters**:
+The following keyword arguments(kwargs) are passed to **nvtrack** as properties.
 | Property            | Type | Description |
 |---------------------|------|-------------|
 | **`ll_config_file`** | str  | Path to the low-level tracker config file (e.g. NvDCF, NvSORT, IOU). |
@@ -296,12 +379,15 @@ Example tracker configs (paths may vary by installation):
 flow = flow.track(ll_config_file=config_tracker_NvDCF_perf.yml, ll_lib_file=libnvds_nvmultiobjecttracker.so)
 ```
 
-##### `analyze(config_file_path,properties)`
+##### `analyze(config_file_path,**kwargs)`
 Add analytics for region-of-interest (ROI), line-crossing, overcrowding and direction analytics. The result will be output as AnalyticsFrameMeta in frame meta and AnalyticsObjInfo in object meta.
 
 **Parameters**:
 - `config_file_path` (str): Path to analytics configuration file
-- Optional properties passed to gst-nvdsanalytics plugin of DeepStream
+- `kwargs` (dict): Optional properties passed to gst-nvdsanalytics plugin of DeepStream
+
+**Notes**:
+analytics MUST follow tracker to work properly.
 
 **Example**:
 ```python
@@ -342,20 +428,28 @@ flow = flow.render(RenderMode.DISCARD, sync=False)
 flow()
 ```
 
-##### `attach(what, probe_name=None)`
-Attach a probe to the pipeline.
+##### `attach(what, name='', tips='', properties=None)`
+Attach a probe to the current flow.
 
 **Parameters**:
 - `what`: Probe instance or element name
-- `probe_name` (str, optional): Name for the probe
+- `name` (str, optional): Name for the probe. Not applicable when `what` is an explicitly created Probe object.
+- `tips` (str, optional): Extra information for the custom object
+- `properties` (dict, optional): Properties to set on the object.
 
 **Returns**: Flow instance (for method chaining)
 
 **Example**:
 ```python
 from pyservicemaker import Probe
-
+# Attach a custom probe (name is embedded in the Probe object)
 flow.attach(Probe("my-probe", MyProbe()))
+
+# Attach built-in probe by module name and name the probe by 'name'
+flow = flow.attach(
+            what="measure_fps_probe",
+            name="fps_probe"
+        )
 ```
 
 ##### `render()`
