@@ -24,6 +24,8 @@ The following are required on the target execution environment:
 - **CUDA 13.1** and **TensorRT 10.14.1.48**
 - **Supported OS:** Ubuntu 24.04 (x86_64 or ARM64/Jetson)
 
+> The `deepstream-byovm` skill needs a few extra runtime tools (`trtexec`, `wkhtmltopdf`, `mediainfo`, `deepstream-app`, an `optimum`-capable Python venv). They are listed and auto-checked by the pre-flight script in [`skills/deepstream-byovm/SKILL.md`](skills/deepstream-byovm/SKILL.md#pre-flight-checks).
+
 > For detailed environment setup, refer to the [DeepStream SDK Developer Guide](https://docs.nvidia.com/metropolis/deepstream/dev-guide/).
 
 ---
@@ -34,6 +36,7 @@ The following are required on the target execution environment:
 DeepStream-Coding-Agent/
 ├── skills/                  # Agentic skills for guided DeepStream development
 │   └── deepstream-dev/      # DeepStream development skill with condensed references
+│   └── deepstream-byovm/    # Autonomous "Bring Your Own Vision Model" pipeline skill
 ├── example_prompts/         # Pre-built prompts for code generation
 ├── LICENSE                  # CC-BY-4.0 AND Apache-2.0
 └── README.md                # This file
@@ -50,13 +53,22 @@ This project provides the tooling and reference material needed to:
 
 ---
 
-## Agentic Skill
+## Agentic Skills
 
 An **agentic skill** is a structured knowledge package that an AI coding assistant can automatically discover and activate during code generation. It contains domain-specific rules, reference documentation, and guardrails that guide the AI agent to produce accurate, idiomatic code — without the developer needing to manually reference files in every conversation.
 
 The `skills/deepstream-dev/` directory contains a DeepStream agentic skill that follows the standard `SKILL.md` convention supported by AI coding assistants such as Cursor, Claude Code, and others.
 
-### About the Skill
+This project ships **two complementary skills**:
+
+| Skill | Mode | Use when you want to… |
+|-------|------|----------------------|
+| [`deepstream-dev`](skills/deepstream-dev/) | Reference-rich (you write code, the agent consults docs) | Hand-author or refine a `pyservicemaker` / GStreamer DeepStream pipeline with the agent answering API questions correctly. |
+| [`deepstream-byovm`](skills/deepstream-byovm/) | Autonomous orchestration (the agent runs an end-to-end pipeline) | Take any HuggingFace or NGC object-detection model and produce a TensorRT engine, a DeepStream multi-stream benchmark, and a PDF report — fully unattended. |
+
+Skip ahead to [Skill: deepstream-byovm](#skill-deepstream-byovm) for the BYOVM workflow.
+
+### Skill: deepstream-dev
 
 This skill targets NVIDIA DeepStream SDK 9.0 development using the Python `pyservicemaker` API. When activated, it instructs the AI agent to consult bundled reference documents before generating any code, significantly reducing inaccuracies and ensuring correct API usage.
 
@@ -87,6 +99,7 @@ Copy the `deepstream-dev` skill directory (including its `references/` subdirect
 |------|----------------|---------------------|
 | Cursor | `~/.cursor/skills/deepstream-dev/` | `<workspace>/.cursor/skills/deepstream-dev/` |
 | Claude Code | `~/.claude/skills/deepstream-dev/` | `<workspace>/.claude/skills/deepstream-dev/` |
+| Codex | `~/.codex/skills/deepstream-dev/` | `<workspace>/.codex/skills/deepstream-dev/` |
 | Other tools | Consult your tool's documentation for the skills directory location |
 
 #### Step 1: Create the Skills Directory
@@ -98,6 +111,9 @@ mkdir -p ~/.cursor/skills/
 # Example: Claude Code user-level
 mkdir -p ~/.claude/skills/
 
+# Example: Codex user-level
+mkdir -p ~/.codex/skills/
+
 # Example: workspace-level (replace .cursor with your tool's directory)
 mkdir -p <workspace>/.cursor/skills/
 ```
@@ -107,6 +123,12 @@ mkdir -p <workspace>/.cursor/skills/
 ```bash
 # User-level (replace path with your tool's skills directory)
 cp -r skills/deepstream-dev ~/.cursor/skills/
+
+# Example: Claude Code user-level
+cp -r skills/deepstream-dev ~/.claude/skills/
+
+# Example: Codex user-level
+cp -r skills/deepstream-dev ~/.codex/skills/
 
 # Or workspace-level
 cp -r skills/deepstream-dev <workspace>/.cursor/skills/
@@ -146,6 +168,111 @@ After copying, the directory structure should look like:
 4. The agent should automatically activate the `deepstream-dev` skill and consult its reference documents before generating code.
 
 > **Tip:** The skill is most effective in **Agent mode**. In agent mode, the AI assistant automatically selects and activates relevant skills based on the task context — no manual file referencing needed.
+
+---
+
+### Skill: deepstream-byovm
+
+`deepstream-byovm` (Bring Your Own Vision Model) is an **autonomous** skill: instead of helping you write code, it executes a complete model bring-up pipeline and hands you back a benchmarked TensorRT engine plus a publication-ready PDF report.
+
+**Pipeline (runs unattended):**
+
+1. **Model Acquire** — parses a HuggingFace or NVIDIA NGC URL, downloads ONNX (or exports SafeTensors → ONNX via `optimum-cli`), extracts labels.
+2. **Engine Build** — builds a dynamic TensorRT engine via `trtexec`, with iterative batch-size scaling and warm-cache reuse.
+3. **DeepStream Pipeline** — generates a custom `nvinfer` bbox parser, builds the `.so`, runs single-stream KITTI validation, then a multi-stream sweep.
+4. **Report** — produces 5 benchmark charts and a Markdown / HTML / PDF report under `models/<model_name>/reports/`.
+
+**Supported model scope:** Object detection models only. Classification, segmentation, pose estimation, and other vision tasks are rejected up front (architecture detected from `config.json` — downloaded for HuggingFace models, extracted from the archive for NGC models).
+
+The following detection architecture families are supported:
+
+- **Transformer-based detectors** — query-based encoder-decoder designs (e.g., DETR and RT-DETR family, including TAO Transformer variants from NGC)
+- **One-stage grid-based detectors** — single-pass, anchor-based or anchor-free designs that predict boxes directly from spatial feature grids (e.g., YOLO family)
+- **Open-vocabulary / zero-shot detectors** — vision-language models that localize objects described by free-form text queries at inference time (e.g., GroundingDINO / OWL-ViT)
+
+Models that fall outside these families are untested; custom bbox parsers may need manual adjustment for novel output tensor layouts.
+
+#### Bundled references
+
+| Reference | Coverage |
+|-----------|----------|
+| `model-acquire.md` | HF / NGC URL parsing, ONNX vs SafeTensors detection, optimum export, label extraction |
+| `engine-build.md` | `trtexec` flags, dynamic shapes, batch-size scaling, timing-cache reuse, PEAK_GPU_STREAMS derivation |
+| `pipeline-run.md` | Custom nvinfer bbox parser (with the mandatory `obj = {}` zero-init), single-stream KITTI validation, multi-stream sweep |
+| `report-generation.md` | `benchmark_data.json` schema, 5-chart generation, 12-section Markdown report, HTML + PDF render via `wkhtmltopdf` |
+
+#### Installing the skill
+
+Same install paths as `deepstream-dev`:
+
+```bash
+# Example: Cursor user-level
+cp -r skills/deepstream-byovm ~/.cursor/skills/
+
+# Example: Claude Code user-level
+cp -r skills/deepstream-byovm ~/.claude/skills/
+
+# Example: Codex user-level
+cp -r skills/deepstream-byovm ~/.codex/skills/
+
+# Or workspace-level
+cp -r skills/deepstream-byovm <workspace>/.cursor/skills/
+```
+
+After copying:
+
+```text
+<skills-directory>/
+└── deepstream-byovm/
+    ├── SKILL.md            # Top-level skill definition + critical rules
+    ├── references/         # 4 phase references (model-acquire, engine-build, pipeline-run, report-generation)
+    └── scripts/            # Helpers: model/, engine/, deepstream/, report/
+```
+
+#### Verifying the installation
+
+1. Open (or restart) your AI coding assistant on a workspace where you want bring-up artifacts to land (the skill writes to `models/<model_name>/` relative to the project root).
+2. Ask:
+
+   ```text
+   Use deepstream-byovm to onboard and benchmark this detection model
+   end-to-end, and produce the PDF benchmark report:
+   https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/rtdetr_2d_warehouse
+
+   Use the default sample video at
+   /opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.mp4.
+   ```
+
+   In Cursor:
+
+   ```text
+   @deepstream-byovm onboard and benchmark this detection model end-to-end,
+   and produce the PDF benchmark report:
+   https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/rtdetr_2d_warehouse
+
+   Use the default sample video at
+   /opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.mp4.
+   ```
+
+   For an interactive variant that prompts for inputs with defaults, see [`example_prompts/byovm_detection_pipeline.md`](example_prompts/byovm_detection_pipeline.md).
+
+3. The agent should activate `deepstream-byovm`, run pre-flight checks (`nvidia-smi`, `trtexec`, `wkhtmltopdf`, `mediainfo`, `deepstream-app`), and proceed through Steps 1–8 without further prompting.
+
+#### Output structure
+
+```text
+models/<model_name>/
+  model/          # ONNX file(s)
+  parser/         # custom nvinfer bbox parser (.cpp, .so)
+  config/         # nvinfer config, ds-app config, labels.txt
+  benchmarks/     # TRT engines + trtexec / DS logs
+  reports/        # benchmark_report.md / .html / .pdf + charts/
+  samples/        # output .mp4, KITTI detections, test frames
+```
+
+The final PDF (`reports/benchmark_report_<model_name>.pdf`) being **>500 KB** is the skill's own success signal that charts were embedded correctly.
+
+> **Tip:** Like `deepstream-dev`, this skill works best in **Agent mode**. Manual `@`-mention is not required after install — the assistant picks it up from the URL pattern in your prompt.
 
 ---
 
