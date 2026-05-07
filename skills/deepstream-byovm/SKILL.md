@@ -52,7 +52,14 @@ fi
 
 # 4. System tools
 which wkhtmltopdf || apt-get install -y wkhtmltopdf
-gst-inspect-1.0 fpsdisplaysink > /dev/null 2>&1 || apt-get install -y gstreamer1.0-plugins-bad
+which mediainfo    || apt-get install -y mediainfo
+which deepstream-app  # required for KITTI dump (Step 6g) and benchmark perf-measurement (Step 7c); shipped with DeepStream SDK
+
+# 5. Sample video — only check default path when user has not provided a custom DS_VIDEO
+if [ -z "$DS_VIDEO" ]; then
+  [ -f /opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.mp4 ] || \
+    echo "WARNING: sample_720p.mp4 not found. Install DeepStream samples or set DS_VIDEO=/path/to/your.mp4"
+fi
 ```
 
 ## Mandatory Output Structure
@@ -72,7 +79,7 @@ models/{model_name}/
     ds/            <- DS benchmark logs
   reports/         <- benchmark_report.md, .html, .pdf, benchmark_data.json
     charts/        <- chart_*.png (5 charts)
-  samples/         <- output .mp4, test frames
+  samples/         <- output .mp4 or .ogv (theoraenc fallback), test frames
     kitti_output/  <- KITTI detection .txt files
 ```
 
@@ -91,7 +98,8 @@ mkdir -p models/$MODEL_NAME/{model,parser,config,scripts,benchmarks/engines,benc
 7. **trtexec `--noDataTransfers`** — GPU-only compute matches DeepStream's GPU-to-GPU data flow.
 8. **Report HTML+PDF** — always use `skills/deepstream-byovm/scripts/report/md-to-html-pdf.py`. Never write a custom HTML generator or call `wkhtmltopdf` directly.
 9. **Object detection only** — reject non-detection architectures from `config.json` before building anything.
-10. **x264enc fallback** — on systems without `/dev/v4l2-nvenc`, single-stream capture uses `x264enc`. Report which encoder was used.
+10. **Encoder fallback (MANDATORY)** — `x264enc` and `openh264enc` are **prohibited**. On NVENC-unavailable systems, use `theoraenc + oggmux` (LGPL; ships in gst-plugins-base; output is `.ogv`). If `theoraenc`/`oggmux` are absent, skip video creation (`DS_SINGLE_STREAM_MODE=skipped`). Report which mode was used: `nvv4l2h264enc` / `theoraenc-fallback` / `skipped`.
+11. **Video source (MANDATORY)** — default is always `sample_720p.mp4` (1280×720). Never autonomously substitute `sample_1080p_h264.mp4` or any other file. Only use a different video when the user explicitly provides a path (via `DS_VIDEO` env var or script argument).
 
 ## Pipeline Timing
 
@@ -141,11 +149,12 @@ Located in `scripts/`.
 | `model/make-static-batch-onnx.py` | 4–5 | Bake batch dim into ONNX |
 | `model/cleanup.sh` | Any | Remove staging dirs, preserve shared venv |
 | `engine/benchmark-trtexec.sh` | 4–5 | Run trtexec with standard flags |
-| `deepstream/ds-single-stream.sh` | 6–7 | Single-stream visual validation (NVENC or x264 fallback) |
+| `deepstream/ds-single-stream.sh` | 6–7 | Single-stream visual validation (NVENC primary; theoraenc+oggmux fallback; skip if neither) |
 | `deepstream/ds-sweep.sh` | 6–7 | 2-phase batch size sweep |
 | `deepstream/benchmark-ds.sh` | 6–7 | Fixed-stream DS benchmark |
 | `deepstream/ds-kitti-dump.sh` | 6–7 | KITTI detection dump via deepstream-app |
-| `deepstream/extract-frame.sh` | 6–7 | Extract sample frames from output MP4 |
+| `deepstream/ds-perf-run.sh` | 7 | Step 7c two-run benchmark — wraps `deepstream-app` with `enable-perf-measurement=1`, writes fixed-name log for the report parser |
+| `deepstream/extract-frame.sh` | 6–7 | Extract sample frames from output video (`.mp4` NVENC path or `.ogv` theoraenc fallback) |
 | `report/generate-benchmark-charts.py` | 8 | Generate 5 benchmark PNG charts |
 | `report/md-to-html-pdf.py` | 8 | Markdown → styled HTML → PDF (canonical benchmark report path) |
 | `report/md-to-pdf.sh` | Any | Markdown → PDF via pandoc/pdflatex — for design docs and references only, NOT for benchmark reports (use md-to-html-pdf.py for those) |

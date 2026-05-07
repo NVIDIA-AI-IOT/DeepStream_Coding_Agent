@@ -31,11 +31,18 @@ if [ -z "$INPUT" ] || [ -z "$OUTPUT" ]; then
     exit 1
 fi
 
-gst-launch-1.0 \
-    filesrc location="${INPUT}" ! qtdemux ! queue ! h264parse ! queue ! nvv4l2decoder ! queue ! \
-    nvvideoconvert ! "video/x-raw,format=RGB" ! videoconvert ! \
-    pngenc snapshot=true ! filesink location="${OUTPUT}" \
-    2>&1 | grep -v "^$"
+if [[ "$INPUT" == *.ogv ]]; then
+    gst-launch-1.0 \
+        filesrc location="${INPUT}" ! oggdemux ! theoradec ! videoconvert ! "video/x-raw,format=RGB" ! \
+        pngenc snapshot=true ! filesink location="${OUTPUT}" \
+        2>&1 | grep -v "^$"
+else
+    gst-launch-1.0 \
+        filesrc location="${INPUT}" ! qtdemux ! queue ! h264parse ! queue ! nvv4l2decoder ! queue ! \
+        nvvideoconvert ! "video/x-raw,format=RGB" ! videoconvert ! \
+        pngenc snapshot=true ! filesink location="${OUTPUT}" \
+        2>&1 | grep -v "^$"
+fi
 STATUS=$?
 
 if [ $STATUS -eq 0 ] && [ -f "$OUTPUT" ]; then

@@ -64,7 +64,7 @@ The report must contain exactly these 12 sections in order:
     - trtexec engine build (full command with all flags and paths)
     - trtexec benchmark BS=1 and BS=MAX_BS
     - DeepStream single-stream validation (`gst-launch-1.0` with filesink + OSD)
-    - DeepStream multi-stream benchmark (`gst-launch-1.0` with fakesink, PEAK_GPU_STREAMS and RT_STREAMS variants)
+    - DeepStream multi-stream benchmark (`deepstream-app` with `enable-perf-measurement=1` via `ds-perf-run.sh`, PEAK_GPU_STREAMS and RT_STREAMS variants)
     - nvinfer config key fields (as an ini code block)
     - Custom parser build command (`make` with DEEPSTREAM_DIR and CUDA_VER)
     - Use actual absolute paths from the model directory, never placeholders
@@ -132,11 +132,13 @@ N_RUN2=$(basename "$DS_LOG_RUN2" | grep -oP 'ds_s\K[0-9]+(?=_run2)')
 [[ "$N_RUN2" =~ ^[0-9]+$ ]] || { echo "ERROR: Could not parse stream count from $(basename "$DS_LOG_RUN2") — expected filename pattern ds_s<N>_run2.log"; exit 1; }
 RT_STREAMS=$N_RUN2
 
-# fpsdisplaysink after nvinfer (no demux) reports batch-rate = fps/stream, NOT total frame rate.
-# Multiply by stream count to get total pipeline throughput (imgs/s).
-FPS_RAW_RUN1=$(grep -oP 'Current FPS:\s*\K[0-9.]+' "$DS_LOG_RUN1" | tail -5 | python3 -c "
+# deepstream-app **PERF: format is `**PERF: fps_run0 (fps_avg0)  fps_run1 (fps_avg1)  ...`
+# Capture stream-0 instantaneous FPS (\K after `**PERF:`) — 1 value per line — so
+# tail -10 always covers exactly 10 measurement windows regardless of stream count.
+# Multiply by stream count for total throughput.
+FPS_RAW_RUN1=$(grep -oP '\*\*PERF:\s*\K[0-9.]+' "$DS_LOG_RUN1" | tail -10 | python3 -c "
 import sys; vals=[float(l) for l in sys.stdin if l.strip()]; print(round(sum(vals)/len(vals),2) if vals else 0)")
-FPS_RAW_RUN2=$(grep -oP 'Current FPS:\s*\K[0-9.]+' "$DS_LOG_RUN2" | tail -5 | python3 -c "
+FPS_RAW_RUN2=$(grep -oP '\*\*PERF:\s*\K[0-9.]+' "$DS_LOG_RUN2" | tail -10 | python3 -c "
 import sys; vals=[float(l) for l in sys.stdin if l.strip()]; print(round(sum(vals)/len(vals),2) if vals else 0)")
 
 TOTAL_FPS_RUN1=$(python3 -c "print(round(float('$FPS_RAW_RUN1') * $N_RUN1, 2))")
@@ -342,14 +344,15 @@ PEAK_GPU_STREAMS = floor(imgs_per_sec_at_MAX_BS / 30)
 | **Total Frames** | (fill from kitti dump) |
 | **Frames with Detections** | (fill from kitti dump) |
 | **Detection Rate** | (fill — must be ≥ 90%) |
-| **Visual Capture Mode** | (fill: `nvv4l2h264enc MP4` OR `x264enc MP4 (NVENC unavailable)`) |
-| **Visual Capture Artifact** | (fill: `samples/${MODEL_NAME}_output.mp4`) |
+| **Visual Capture Mode** | (fill: `nvv4l2h264enc MP4` OR `theoraenc OGV (NVENC unavailable)` OR `skipped (no encoder available)`) |
+| **Visual Capture Artifact** | (fill: `samples/${MODEL_NAME}_output.mp4` for NVENC path; `samples/${MODEL_NAME}_output.ogv` for theoraenc fallback; `N/A` if skipped) |
 | **Validation Result** | PASS |
 
-> **Encoder reporting rule (MANDATORY):** The Visual Capture Mode field MUST be exactly
-> one of the two values shown above. If `ds-single-stream.sh` printed
-> `DS_SINGLE_STREAM_MODE=x264enc-fallback`, set Visual Capture Mode to
-> `x264enc MP4 (NVENC unavailable)`. Both paths produce an MP4 at the same path.
+> **Encoder reporting rule (MANDATORY):** The Visual Capture Mode field MUST be exactly one of:
+> - `nvv4l2h264enc MP4` — NVENC succeeded; artifact is `.mp4`
+> - `theoraenc OGV (NVENC unavailable)` — if `DS_SINGLE_STREAM_MODE=theoraenc-fallback`; use `.ogv` path from `DS_SINGLE_STREAM_OUTPUT=`
+> - `skipped (no encoder available)` — if `DS_SINGLE_STREAM_MODE=skipped`; no artifact file
+> `x264enc` and `openh264enc` are prohibited and must never appear in this field.
 
 ## 8. DeepStream Benchmark Results
 

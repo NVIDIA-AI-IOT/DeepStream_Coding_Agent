@@ -47,7 +47,7 @@ PARSER_SO="$4"
 LABELS="$5"
 ENGINES_DIR="$6"
 CONFIGS_DIR="$7"
-VIDEO="${8:-/opt/nvidia/deepstream/deepstream-9.0/samples/streams/sample_720p.mp4}"
+VIDEO="${8:-/opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.mp4}"
 
 # Derive INPUT_NAME, H, W from the ONNX model — mirrors how engine-build.md does it.
 # Env var overrides let callers handle models with dynamic spatial dims (e.g. H=800 W=800 ./ds-sweep.sh ...).
@@ -82,14 +82,10 @@ PROBE_SIZES=(1 4 8)       # fast trtexec probe batch sizes
 PROBE_DURATION=10         # seconds per trtexec probe run
 # NEVER use filesrc num-buffers as a frame count — num-buffers counts file byte blocks (4096B),
 # not video frames. Leave num-buffers unset so filesrc reads to natural EOS.
-# Detect actual frame count and FPS via ffprobe — consistent with benchmark-ds.sh.
-VIDEO_FPS=$(ffprobe -v error -select_streams v:0 \
-    -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 \
-    "${VIDEO}" 2>/dev/null | awk -F'/' '{if($2>0) printf "%.0f",$1/$2; else print "30"}')
+# Detect actual frame count and FPS via mediainfo — consistent with benchmark-ds.sh.
+VIDEO_FPS=$(mediainfo --Inform="Video;%FrameRate%" "${VIDEO}" 2>/dev/null | awk '{printf "%.0f", $1+0}')
 VIDEO_FPS="${VIDEO_FPS:-30}"
-ACTUAL_FRAMES_PER_STREAM=$(ffprobe -v error -select_streams v:0 \
-    -count_packets -show_entries stream=nb_read_packets \
-    -of csv=p=0 "${VIDEO}" 2>/dev/null)
+ACTUAL_FRAMES_PER_STREAM=$(mediainfo --Inform="Video;%FrameCount%" "${VIDEO}" 2>/dev/null)
 if ! echo "${ACTUAL_FRAMES_PER_STREAM}" | grep -qE '^[0-9]+$' || [ "${ACTUAL_FRAMES_PER_STREAM:-0}" -eq 0 ]; then
     ACTUAL_FRAMES_PER_STREAM=1440   # fallback for sample_720p.mp4: ~48s × 30fps
 fi

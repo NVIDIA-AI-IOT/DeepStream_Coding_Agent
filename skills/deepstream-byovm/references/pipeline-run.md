@@ -61,8 +61,9 @@ print(''.join(p.capitalize() for p in parts))
 # e.g. rtdetr-l → rtdetr_l  grounding-dino-base → grounding_dino_base
 MODEL_NAME_SAFE=$(echo "$MODEL_NAME" | tr -c 'A-Za-z0-9' '_')
 
-# Video source — override via DS_VIDEO env var if DeepStream installed in non-standard location
-# or to use a custom 720p H.264 file
+# Video source — default is sample_720p.mp4 (MANDATORY). Never autonomously substitute
+# sample_1080p_h264.mp4 or any other file. DS_VIDEO may only be set when the user explicitly
+# provides a custom video path; it is not a licence to pick a different resolution.
 VIDEO="${DS_VIDEO:-/opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.mp4}"
 [ -f "$VIDEO" ] || {
   echo "ERROR: Video file not found: $VIDEO"
@@ -244,10 +245,11 @@ echo "labels.txt: $NUM_LABELS classes -> num-detected-classes=$NUM_LABELS"
 ### 6f: Single-Stream Visual Validation
 
 > **ENCODER RULE:**
-> Primary encoder is `nvv4l2h264enc` (NVENC via V4L2). On systems where `/dev/v4l2-nvenc`
-> is unavailable (dGPU, datacenter SKUs), the approved fallback is `x264enc` with an explicit
-> NVMM→system-memory conversion — this correctly preserves `nvdsosd` overlays.
-> Use `skills/deepstream-byovm/scripts/deepstream/ds-single-stream.sh` which handles this automatically.
+> Primary encoder is `nvv4l2h264enc` (NVENC via V4L2) → `.mp4`. `x264enc` and `openh264enc` are **prohibited**.
+> On systems where `/dev/v4l2-nvenc` is unavailable, the approved fallback is `theoraenc + oggmux`
+> (LGPL; both ship in gst-plugins-base) → `.ogv`. If `theoraenc`/`oggmux` are absent, video creation is skipped.
+> Use `skills/deepstream-byovm/scripts/deepstream/ds-single-stream.sh` which handles this automatically
+> and emits a `DS_SINGLE_STREAM_MODE=` marker the report parser reads.
 
 **Primary (NVENC available):**
 
@@ -265,7 +267,9 @@ GST_DEBUG=1 gst-launch-1.0 \
   filesink location=models/$MODEL_NAME/samples/${MODEL_NAME}_output.mp4 sync=0
 ```
 
-**Fallback (NVENC unavailable — `/dev/v4l2-nvenc` missing):**
+**Fallback (NVENC unavailable — `/dev/v4l2-nvenc` missing, `theoraenc`/`oggmux` present):**
+
+Output extension switches from `.mp4` to `.ogv` (Ogg/Theora container). `theoraenc` consumes planar `I420`, not `NV12`.
 
 ```bash
 GST_DEBUG=1 gst-launch-1.0 \
@@ -274,17 +278,31 @@ GST_DEBUG=1 gst-launch-1.0 \
   m.sink_0 nvstreammux name=m batch-size=1 width=1280 height=720 ! queue ! \
   nvinfer config-file-path=models/$MODEL_NAME/config/config_infer_primary_${MODEL_NAME}.txt ! queue ! \
   nvvideoconvert ! nvdsosd ! nvvideoconvert ! \
-  "video/x-raw, format=NV12" ! x264enc pass=qual quantizer=18 speed-preset=medium ! h264parse ! mp4mux ! \
-  filesink location=models/$MODEL_NAME/samples/${MODEL_NAME}_output.mp4 sync=0
+  "video/x-raw, format=I420" ! theoraenc quality=48 ! oggmux ! \
+  filesink location=models/$MODEL_NAME/samples/${MODEL_NAME}_output.ogv sync=0
 ```
 
-Extract a frame to visually confirm bounding boxes:
+Extract a frame to visually confirm bounding boxes — auto-detect which output file exists:
+
 ```bash
-gst-launch-1.0 \
-  filesrc location=models/$MODEL_NAME/samples/${MODEL_NAME}_output.mp4 ! \
-  qtdemux ! avdec_h264 ! videoconvert ! "video/x-raw,format=RGB" ! \
-  jpegenc quality=95 ! \
-  multifilesink location=models/$MODEL_NAME/samples/frame_%04d.jpg max-files=3
+SAMPLE_OUT=$(ls models/$MODEL_NAME/samples/${MODEL_NAME}_output.{mp4,ogv} 2>/dev/null | head -1)
+
+case "$SAMPLE_OUT" in
+  *.mp4)
+    gst-launch-1.0 \
+      filesrc location="$SAMPLE_OUT" ! \
+      qtdemux ! h264parse ! nvv4l2decoder ! videoconvert ! "video/x-raw,format=RGB" ! \
+      jpegenc quality=95 ! \
+      multifilesink location=models/$MODEL_NAME/samples/frame_%04d.jpg max-files=3
+    ;;
+  *.ogv)
+    gst-launch-1.0 \
+      filesrc location="$SAMPLE_OUT" ! \
+      oggdemux ! theoradec ! videoconvert ! "video/x-raw,format=RGB" ! \
+      jpegenc quality=95 ! \
+      multifilesink location=models/$MODEL_NAME/samples/frame_%04d.jpg max-files=3
+    ;;
+esac
 ```
 
 If **no detections appear**, the most common cause is wrong `net-scale-factor` — update the config and re-run.
@@ -402,23 +420,9 @@ Every pipeline stage must be separated by `queue` elements. Use `leaky=downstrea
 
 Only **2 DS pipeline runs** characterise DS overhead vs trtexec.
 
-First, verify `fpsdisplaysink` is available (part of `gst-plugins-bad`):
-```bash
-gst-inspect-1.0 fpsdisplaysink > /dev/null 2>&1 || \
-  { echo "ERROR: fpsdisplaysink not found — install gstreamer1.0-plugins-bad"; exit 1; }
-```
+Both runs go through `deepstream-app` with `[application] enable-perf-measurement=1` (wrapped by `skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh`). FPS is parsed from the canonical `**PERF:` lines DeepStream emits at the configured measurement interval. This replaces the older `gst-launch-1.0 ... ! fpsdisplaysink` path so the runtime no longer depends on `gstreamer1.0-plugins-bad`.
 
-Pipeline building helper — generates N filesrc decode chains as a string (no gst-launch, safe to capture):
-```bash
-build_pipeline() {
-  local N=$1
-  local P=""
-  for i in $(seq 0 $((N-1))); do
-    P="$P filesrc location=$VIDEO ! qtdemux ! queue leaky=downstream ! h264parse ! queue ! nvv4l2decoder ! queue ! m.sink_$i"
-  done
-  echo "$P"
-}
-```
+> **PERF line format**: `**PERF: <fps_run> (<fps_avg>)` — one float per active source. The helper script averages the per-stream instantaneous FPS across the last few measurement windows; the parser below mirrors that contract.
 
 **DS Run 1 — Calibration at PEAK_GPU_STREAMS streams:**
 
@@ -430,18 +434,15 @@ build_pipeline() {
 # Hard constraint: num_streams <= engine max batch size — always
 N=$(python3 -c "print(min($PEAK_GPU_STREAMS, $MAX_BS))")
 LOG_RUN1="models/$MODEL_NAME/benchmarks/ds/ds_s${N}_run1.log"
-PIPELINE=$(build_pipeline $N)
 
 STEP7_RUN1_START=$(date +%s.%N)
-GST_DEBUG=1 gst-launch-1.0 \
-  $PIPELINE \
-  nvstreammux name=m batch-size=$N width=1280 height=720 batched-push-timeout=-1 ! queue ! \
-  nvinfer config-file-path=models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
-    batch-size=$N model-engine-file=$ENGINE ! \
-  queue ! fpsdisplaysink sync=false video-sink=fakesink -e \
-  2>&1 | tee "$LOG_RUN1"
+bash skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh \
+  models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
+  "$N" \
+  "$LOG_RUN1" \
+  "$VIDEO"
 
-FPS_RUN1=$(grep -oP 'Current FPS:\s*\K[0-9.]+' "$LOG_RUN1" | tail -5 | python3 -c "
+FPS_RUN1=$(grep -oP '\*\*PERF:\s*\K[0-9.]+' "$LOG_RUN1" | tail -10 | python3 -c "
 import sys; vals=[float(l) for l in sys.stdin if l.strip()]; print(round(sum(vals)/len(vals),2) if vals else 0)")
 python3 -c "exit(0 if float('$FPS_RUN1') > 0 else 1)" || \
   { echo "ERROR: FPS parsing failed for Run 1 — check $LOG_RUN1"; exit 1; }
@@ -458,18 +459,15 @@ echo "[Step 7 Run 1] completed in ${STEP7_RUN1_DURATION}s"
 ```bash
 N=$RT_STREAMS
 LOG_RUN2="models/$MODEL_NAME/benchmarks/ds/ds_s${N}_run2.log"
-PIPELINE=$(build_pipeline $N)
 
 STEP7_RUN2_START=$(date +%s.%N)
-GST_DEBUG=1 gst-launch-1.0 \
-  $PIPELINE \
-  nvstreammux name=m batch-size=$N width=1280 height=720 batched-push-timeout=-1 ! queue ! \
-  nvinfer config-file-path=models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
-    batch-size=$N model-engine-file=$ENGINE ! \
-  queue ! fpsdisplaysink sync=false video-sink=fakesink -e \
-  2>&1 | tee "$LOG_RUN2"
+bash skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh \
+  models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
+  "$N" \
+  "$LOG_RUN2" \
+  "$VIDEO"
 
-FPS_RUN2=$(grep -oP 'Current FPS:\s*\K[0-9.]+' "$LOG_RUN2" | tail -5 | python3 -c "
+FPS_RUN2=$(grep -oP '\*\*PERF:\s*\K[0-9.]+' "$LOG_RUN2" | tail -10 | python3 -c "
 import sys; vals=[float(l) for l in sys.stdin if l.strip()]; print(round(sum(vals)/len(vals),2) if vals else 0)")
 python3 -c "exit(0 if float('$FPS_RUN2') > 0 else 1)" || \
   { echo "ERROR: FPS parsing failed for Run 2 — check $LOG_RUN2"; exit 1; }
@@ -491,15 +489,12 @@ if [ "$RT_CONFIRMED" = "NO" ]; then
   echo "Run 2 not real-time — retrying at $RT_STREAMS streams"
   N=$RT_STREAMS
   LOG_RUN2="models/$MODEL_NAME/benchmarks/ds/ds_s${N}_run2.log"
-  PIPELINE=$(build_pipeline $N)
-  GST_DEBUG=1 gst-launch-1.0 \
-    $PIPELINE \
-    nvstreammux name=m batch-size=$N width=1280 height=720 batched-push-timeout=-1 ! queue ! \
-    nvinfer config-file-path=models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
-      batch-size=$N model-engine-file=$ENGINE ! \
-    queue ! fpsdisplaysink sync=false video-sink=fakesink -e \
-    2>&1 | tee "$LOG_RUN2"
-  FPS_RUN2=$(grep -oP 'Current FPS:\s*\K[0-9.]+' "$LOG_RUN2" | tail -5 | python3 -c "
+  bash skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh \
+    models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
+    "$N" \
+    "$LOG_RUN2" \
+    "$VIDEO"
+  FPS_RUN2=$(grep -oP '\*\*PERF:\s*\K[0-9.]+' "$LOG_RUN2" | tail -10 | python3 -c "
 import sys; vals=[float(l) for l in sys.stdin if l.strip()]; print(round(sum(vals)/len(vals),2) if vals else 0)")
   TOTAL_FPS_RUN2=$(python3 -c "print(round(float('$FPS_RUN2') * $N, 2))")
   RT_CONFIRMED=$(python3 -c "print('YES' if float('$FPS_RUN2') >= 30 else 'NO')")

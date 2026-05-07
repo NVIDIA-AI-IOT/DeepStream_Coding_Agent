@@ -29,28 +29,25 @@ set -euo pipefail
 
 CONFIG="${1:-}"
 NUM_STREAMS="${2:-}"
-VIDEO="${3:-/opt/nvidia/deepstream/deepstream-9.0/samples/streams/sample_720p.mp4}"
+VIDEO="${3:-/opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.mp4}"
 MUXER_W=1280
 MUXER_H=720
 NS_PER_SEC=$(( 1000 * 1000 * 1000 ))
-# Detect video FPS via ffprobe; fall back to 30 for the standard sample
-VIDEO_FPS=$(ffprobe -v error -select_streams v:0 \
-    -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 \
-    "${VIDEO}" 2>/dev/null | awk -F'/' '{if($2>0) printf "%.0f",$1/$2; else print "30"}')
-VIDEO_FPS="${VIDEO_FPS:-30}"
 
 if [ -z "$CONFIG" ] || [ -z "$NUM_STREAMS" ]; then
     echo "Usage: $0 <config_file> <num_streams> [input_video]"
     exit 1
 fi
 
-# Detect actual frame count; fall back to 1440 if ffprobe unavailable or fails
+# Detect video FPS via mediainfo; fall back to 30 for the standard sample
+VIDEO_FPS=$(mediainfo --Inform="Video;%FrameRate%" "${VIDEO}" 2>/dev/null | awk '{printf "%.0f", $1+0}')
+VIDEO_FPS="${VIDEO_FPS:-30}"
+
+# Detect actual frame count; fall back to 1440 if mediainfo unavailable or fails
 if [ -n "$3" ]; then
-    FRAMES_PER_STREAM=$(ffprobe -v error -select_streams v:0 \
-        -count_packets -show_entries stream=nb_read_packets \
-        -of csv=p=0 "${VIDEO}" 2>/dev/null)
+    FRAMES_PER_STREAM=$(mediainfo --Inform="Video;%FrameCount%" "${VIDEO}" 2>/dev/null)
     if ! echo "$FRAMES_PER_STREAM" | grep -qE '^[0-9]+$' || [ "$FRAMES_PER_STREAM" -eq 0 ]; then
-        echo "Warning: ffprobe failed, falling back to 1440 frames" >&2
+        echo "Warning: mediainfo failed, falling back to 1440 frames" >&2
         FRAMES_PER_STREAM=1440
     fi
 else

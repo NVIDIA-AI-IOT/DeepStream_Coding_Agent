@@ -22,14 +22,16 @@
 # Example: ./ds-single-stream.sh config_infer_primary_yolox.txt yolox_output.mp4
 #
 # Encoder policy (MANDATORY):
-#   - Primary path uses nvv4l2h264enc (NVENC). nvdsosd overlays are reliably
-#     preserved only with NVENC on the NVMM memory path.
-#   - On NVENC-less GPUs (NVENC init fails with "/dev/v4l2-nvenc failed during
-#     initialization"), this script automatically falls back to x264enc with an
-#     explicit NVMM→system-memory conversion step:
-#       nvvideoconvert ! "video/x-raw, format=NV12" ! videoconvert ! x264enc
-#     This correctly bakes nvdsosd overlays before the CPU encoder sees the frame.
-#     The benchmark report must surface that the x264enc fallback was used.
+#   - Primary path uses nvv4l2h264enc (NVENC) with .mp4 container. nvdsosd
+#     overlays are reliably preserved only with NVENC on the NVMM memory path.
+#   - x264enc and openh264enc are PROHIBITED and must never be used.
+#   - On NVENC-init failure, the script checks theoraenc + oggmux availability
+#     (LGPL elements; both ship in gst-plugins-base):
+#       * Available  → falls back to theoraenc+oggmux → saves <output>.ogv
+#           nvvideoconvert ! "video/x-raw, format=I420" ! theoraenc quality=48 ! oggmux
+#         Emits DS_SINGLE_STREAM_MODE=theoraenc-fallback and DS_SINGLE_STREAM_OUTPUT=<path>
+#       * Unavailable → skips video creation, emits DS_SINGLE_STREAM_MODE=skipped, exit 0
+#     The benchmark report must surface which encoder mode was used.
 ################################################################################
 
 set -o pipefail
@@ -70,38 +72,48 @@ STATUS=${PIPESTATUS[0]}
 if [ $STATUS -eq 0 ] && [ -s "$OUTPUT" ]; then
     echo ""
     echo "Output saved to: ${OUTPUT}"
+    echo "DS_SINGLE_STREAM_MODE=nvenc-primary"
+    echo "DS_SINGLE_STREAM_OUTPUT=${OUTPUT}"
     exit 0
 fi
 
-# Detect NVENC-init failure -- the only condition under which we switch to x264enc.
-# Any other failure must surface as a hard error.
+# Detect NVENC-init failure -- the only condition under which we use the theoraenc fallback.
+# x264enc and openh264enc are prohibited. Any other failure surfaces as a hard error.
 if grep -qE "v4l2-nvenc.*failed during initialization|Could not open device.*v4l2-nvenc|nvv4l2h264enc.*not-negotiated" "$LOG_FILE"; then
     echo ""
     echo "WARNING: nvv4l2h264enc (NVENC) is unavailable on this GPU." >&2
-    echo "         Falling back to x264enc with NVMM→system-memory conversion." >&2
-    echo ""
 
-    rm -f "$OUTPUT"
+    if ! gst-inspect-1.0 theoraenc > /dev/null 2>&1 || ! gst-inspect-1.0 oggmux > /dev/null 2>&1; then
+        echo "WARNING: theoraenc/oggmux not available. Skipping video creation." >&2
+        echo "DS_SINGLE_STREAM_MODE=skipped"
+        exit 0
+    fi
+
+    echo "         Falling back to theoraenc+oggmux (OGV output)." >&2
+    echo ""
+    OGV_OUTPUT="$(echo "${OUTPUT}" | sed -E 's/\.[Mm][Pp]4$//').ogv"
+    rm -f "$OUTPUT" "$OGV_OUTPUT"
 
     gst-launch-1.0 \
         filesrc location="${VIDEO}" ! qtdemux ! queue ! h264parse ! queue ! nvv4l2decoder ! queue ! mux.sink_0 \
         nvstreammux name=mux batch-size=1 width=${MUXER_W} height=${MUXER_H} batched-push-timeout=-1 ! \
         nvinfer config-file-path="${CONFIG}" ! \
         nvvideoconvert ! nvdsosd ! nvvideoconvert ! \
-        "video/x-raw, format=NV12" ! x264enc pass=qual quantizer=18 speed-preset=medium ! h264parse ! mp4mux ! \
-        filesink location="${OUTPUT}" sync=0 \
+        "video/x-raw, format=I420" ! theoraenc quality=48 ! oggmux ! \
+        filesink location="${OGV_OUTPUT}" sync=0 \
         2>&1
-    X264_STATUS=$?
+    THEORA_STATUS=$?
 
-    if [ $X264_STATUS -eq 0 ] && [ -s "$OUTPUT" ]; then
+    if [ $THEORA_STATUS -eq 0 ] && [ -s "$OGV_OUTPUT" ]; then
         echo ""
-        echo "x264enc fallback succeeded. Output saved to: ${OUTPUT}"
-        echo "DS_SINGLE_STREAM_MODE=x264enc-fallback"
+        echo "theoraenc fallback succeeded. Output saved to: ${OGV_OUTPUT}"
+        echo "DS_SINGLE_STREAM_MODE=theoraenc-fallback"
+        echo "DS_SINGLE_STREAM_OUTPUT=${OGV_OUTPUT}"
         exit 0
     fi
 
-    echo "ERROR: x264enc fallback pipeline also failed (exit ${X264_STATUS})." >&2
-    exit ${X264_STATUS:-1}
+    echo "ERROR: theoraenc fallback pipeline failed (exit ${THEORA_STATUS})." >&2
+    exit ${THEORA_STATUS:-1}
 fi
 
 echo "Pipeline failed with exit code $STATUS (not an NVENC-init failure)." >&2
