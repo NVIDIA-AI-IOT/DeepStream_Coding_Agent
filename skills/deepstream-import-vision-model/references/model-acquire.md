@@ -22,7 +22,7 @@ Temporary staging dirs (`hf_model/`, `ngc_download/`, `build/`) are created inli
 Accept a model URL or ID in one of these formats and extract the required fields:
 
 ```bash
-[ -z "$ARGUMENTS" ] && { echo "ERROR: No model URL or ID provided. Usage: /deepstream-byovm <url>"; exit 1; }
+[ -z "$ARGUMENTS" ] && { echo "ERROR: No model URL or ID provided. Usage: /deepstream-import-vision-model <url>"; exit 1; }
 INPUT="${ARGUMENTS}"
 
 if echo "$INPUT" | grep -q "catalog.ngc.nvidia.com"; then
@@ -66,7 +66,7 @@ fi
 - Browse the HF repository and classify available model files using the vetted helper script
   (validates inputs, uses HTTPS+TLSv1.2 only, honors `$HF_TOKEN`):
   ```bash
-  FILES="$(bash skills/deepstream-byovm/scripts/model/hf-list-files.sh "$HF_ORG" "$MODEL_NAME")"
+  FILES="$(bash skills/deepstream-import-vision-model/scripts/model/hf-list-files.sh "$HF_ORG" "$MODEL_NAME")"
   ONNX_FILES=$(echo "$FILES" | grep -E '\.onnx$' || true)
   ST_FILES=$(echo "$FILES" | grep -E '\.(safetensors|bin)$' || true)
   echo "ONNX files:      ${ONNX_FILES:-none}"
@@ -75,7 +75,7 @@ fi
 
   # If ONNX list is empty in root, also check /onnx subdirectory
   if [ -z "$ONNX_FILES" ]; then
-      ONNX_SUB="$(bash skills/deepstream-byovm/scripts/model/hf-list-files.sh "$HF_ORG" "$MODEL_NAME" onnx | grep -E '\.onnx$' || true)"
+      ONNX_SUB="$(bash skills/deepstream-import-vision-model/scripts/model/hf-list-files.sh "$HF_ORG" "$MODEL_NAME" onnx | grep -E '\.onnx$' || true)"
       echo "ONNX in /onnx subdir: ${ONNX_SUB:-none}"
   fi
   ```
@@ -91,7 +91,7 @@ fi
   ```bash
   # HF: download from API via vetted helper. NGC: extracted from archive in Step 2d.
   if [ "$MODEL_SOURCE" = "hf" ]; then
-    bash skills/deepstream-byovm/scripts/model/hf-download-config.sh \
+    bash skills/deepstream-import-vision-model/scripts/model/hf-download-config.sh \
         "$HF_ORG" "$MODEL_NAME" "models/$MODEL_NAME/config/config.json"
   else
     echo "NGC model — config.json will be extracted from the downloaded archive in Step 2d"
@@ -103,7 +103,7 @@ fi
   - Architecture class (e.g., `GroundingDinoForObjectDetection`)
   - Number of inputs (single input vs multi-modal)
 
-- **Reject non-detection architectures (fail fast)**: Check the `architectures` field in `config.json` before continuing. If the architecture class ends in a non-detection suffix such as `ForImageClassification`, `ForSemanticSegmentation`, `ForInstanceSegmentation`, `ForPanopticSegmentation`, `ForDepthEstimation`, `ForMaskedLM`, `ForTokenClassification`, or `ForCausalLM`, **abort the pipeline with a clear error and exit non-zero**: `"deepstream-byovm currently supports object detection models only. Detected architecture: {arch_class}. Classification, segmentation, and other vision tasks are not yet supported."` Do not prompt the user. Detection architectures end in `ForObjectDetection` (or, for some DETR-family variants, `ForConditionalDetection` / `ForZeroShotObjectDetection`).
+- **Reject non-detection architectures (fail fast)**: Check the `architectures` field in `config.json` before continuing. If the architecture class ends in a non-detection suffix such as `ForImageClassification`, `ForSemanticSegmentation`, `ForInstanceSegmentation`, `ForPanopticSegmentation`, `ForDepthEstimation`, `ForMaskedLM`, `ForTokenClassification`, or `ForCausalLM`, **abort the pipeline with a clear error and exit non-zero**: `"deepstream-import-vision-model currently supports object detection models only. Detected architecture: {arch_class}. Classification, segmentation, and other vision tasks are not yet supported."` Do not prompt the user. Detection architectures end in `ForObjectDetection` (or, for some DETR-family variants, `ForConditionalDetection` / `ForZeroShotObjectDetection`).
 
 - **Extract `labels.txt` from `config.json`** — run this immediately after `config.json` is in place (for HF models that is now; for NGC models this runs at the end of Step 2d):
   ```bash
@@ -157,7 +157,7 @@ When the repo only has `.safetensors` (or `.bin`) files and no ONNX export, conv
 
 #### 2b-i: Setup Isolated Virtual Environment
 - **ALWAYS** use a dedicated venv for export tools. Never install optimum/transformers/torch system-wide.
-- Use a **single shared venv** at `build/.venv_optimum` across all models — `optimum`, `transformers`, `torch`, and `safetensors` are heavy (~2-5 GB) and identical from one model to the next, so creating one per model wastes ~minutes of install time and GBs of disk every run. The `skills/deepstream-byovm/scripts/model/safetensors-to-onnx.sh` helper is built around this shared venv; align the skill-driven path with it.
+- Use a **single shared venv** at `build/.venv_optimum` across all models — `optimum`, `transformers`, `torch`, and `safetensors` are heavy (~2-5 GB) and identical from one model to the next, so creating one per model wastes ~minutes of install time and GBs of disk every run. The `skills/deepstream-import-vision-model/scripts/model/safetensors-to-onnx.sh` helper is built around this shared venv; align the skill-driven path with it.
   ```bash
   mkdir -p build
   VENV=build/.venv_optimum
@@ -177,7 +177,7 @@ When the repo only has `.safetensors` (or `.bin`) files and no ONNX export, conv
   ```
 - The venv lives under `build/.venv_optimum` at the repo root, keeping `models/` clean and excluded from git via the root `.gitignore`
 - All subsequent Python/pip commands in Step 2b must run inside this venv
-- Legacy per-model venvs at `build/.venv_$MODEL_NAME` from older runs are still cleaned up by `skills/deepstream-byovm/scripts/model/cleanup.sh "$MODEL_NAME"` for backward compatibility
+- Legacy per-model venvs at `build/.venv_$MODEL_NAME` from older runs are still cleaned up by `skills/deepstream-import-vision-model/scripts/model/cleanup.sh "$MODEL_NAME"` for backward compatibility
 
 #### 2b-ii: Download Required Files
 - Download from the HF repo into `models/$MODEL_NAME/hf_model/` using `-P` to avoid changing the working directory:
@@ -318,9 +318,9 @@ Only run `onnxsim` if TRT build fails with `ForeignNode` warnings — it is not 
 - `cleanup.sh` removes per-model artifacts (`models/$MODEL_NAME/hf_model`, `models/$MODEL_NAME/onnx_export`, and any legacy `build/.venv_$MODEL_NAME` left over from older runs):
   ```bash
   # Validated script; will refuse unsafe paths. Shared .venv_optimum is preserved.
-  bash skills/deepstream-byovm/scripts/model/cleanup.sh "$MODEL_NAME"
+  bash skills/deepstream-import-vision-model/scripts/model/cleanup.sh "$MODEL_NAME"
   # Preview without removing:
-  # bash skills/deepstream-byovm/scripts/model/cleanup.sh "$MODEL_NAME" --dry-run
+  # bash skills/deepstream-import-vision-model/scripts/model/cleanup.sh "$MODEL_NAME" --dry-run
   ```
 - The ONNX file is now at `models/$MODEL_NAME/model/$MODEL_NAME.onnx` -- proceed to engine building
 
@@ -331,8 +331,8 @@ When the model comes from NVIDIA NGC (not HuggingFace), download using the `ngc`
 ```bash
 # Vetted helper: prefers ngc CLI if installed, else falls back to authenticated
 # HTTPS+TLS via curl against the public NGC catalog API. All inputs validated
-# against ^[A-Za-z0-9._-]+$. See skills/deepstream-byovm/scripts/model/ngc-download.sh for details.
-bash skills/deepstream-byovm/scripts/model/ngc-download.sh \
+# against ^[A-Za-z0-9._-]+$. See skills/deepstream-import-vision-model/scripts/model/ngc-download.sh for details.
+bash skills/deepstream-import-vision-model/scripts/model/ngc-download.sh \
     "$NGC_ORG" "$NGC_TEAM" "$MODEL_NAME" "$NGC_VERSION" \
     "models/$MODEL_NAME/ngc_download"
 

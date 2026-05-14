@@ -24,7 +24,7 @@ The following are required on the target execution environment:
 - **CUDA 13.1** and **TensorRT 10.14.1.48**
 - **Supported OS:** Ubuntu 24.04 (x86_64 or ARM64/Jetson)
 
-> The `deepstream-byovm` skill needs a few extra runtime tools (`trtexec`, `wkhtmltopdf`, `mediainfo`, `deepstream-app`, an `optimum`-capable Python venv). They are listed and auto-checked by the pre-flight script in [`skills/deepstream-byovm/SKILL.md`](skills/deepstream-byovm/SKILL.md#pre-flight-checks).
+> The `deepstream-import-vision-model` skill needs a few extra runtime tools (`trtexec`, `wkhtmltopdf`, `mediainfo`, `deepstream-app`, an `optimum`-capable Python venv). They are listed and auto-checked by the pre-flight script in [`skills/deepstream-import-vision-model/SKILL.md`](skills/deepstream-import-vision-model/SKILL.md#pre-flight-checks).
 
 > For detailed environment setup, refer to the [DeepStream SDK Developer Guide](https://docs.nvidia.com/metropolis/deepstream/dev-guide/).
 
@@ -36,7 +36,7 @@ The following are required on the target execution environment:
 DeepStream-Coding-Agent/
 ├── skills/                  # Agentic skills for guided DeepStream development
 │   └── deepstream-dev/      # DeepStream development skill with condensed references
-│   └── deepstream-byovm/    # Autonomous "Bring Your Own Vision Model" pipeline skill
+│   └── deepstream-import-vision-model/    # Autonomous vision-model onboarding & benchmarking pipeline skill
 ├── example_prompts/         # Pre-built prompts for code generation
 ├── LICENSE                  # CC-BY-4.0 AND Apache-2.0
 └── README.md                # This file
@@ -64,9 +64,9 @@ This project ships **two complementary skills**:
 | Skill | Mode | Use when you want to… |
 |-------|------|----------------------|
 | [`deepstream-dev`](skills/deepstream-dev/) | Reference-rich (you write code, the agent consults docs) | Hand-author or refine a `pyservicemaker` / GStreamer DeepStream pipeline with the agent answering API questions correctly. |
-| [`deepstream-byovm`](skills/deepstream-byovm/) | Autonomous orchestration (the agent runs an end-to-end pipeline) | Take any HuggingFace or NGC object-detection model and produce a TensorRT engine, a DeepStream multi-stream benchmark, and a PDF report — fully unattended. |
+| [`deepstream-import-vision-model`](skills/deepstream-import-vision-model/) | Autonomous orchestration (the agent runs an end-to-end pipeline) | Take any HuggingFace or NGC object-detection model and produce a TensorRT engine, a DeepStream multi-stream benchmark, and a PDF report — fully unattended. |
 
-Skip ahead to [Skill: deepstream-byovm](#skill-deepstream-byovm) for the BYOVM workflow.
+Skip ahead to [Skill: deepstream-import-vision-model](#skill-deepstream-import-vision-model) for the model-onboarding workflow.
 
 ### Skill: deepstream-dev
 
@@ -171,9 +171,9 @@ After copying, the directory structure should look like:
 
 ---
 
-### Skill: deepstream-byovm
+### Skill: deepstream-import-vision-model
 
-`deepstream-byovm` (Bring Your Own Vision Model) is an **autonomous** skill: instead of helping you write code, it executes a complete model bring-up pipeline and hands you back a benchmarked TensorRT engine plus a publication-ready PDF report.
+`deepstream-import-vision-model` is an **autonomous** skill: instead of helping you write code, it executes a complete model bring-up pipeline and hands you back a benchmarked TensorRT engine plus a publication-ready PDF report.
 
 **Pipeline (runs unattended):**
 
@@ -207,23 +207,23 @@ Same install paths as `deepstream-dev`:
 
 ```bash
 # Example: Cursor user-level
-cp -r skills/deepstream-byovm ~/.cursor/skills/
+cp -r skills/deepstream-import-vision-model ~/.cursor/skills/
 
 # Example: Claude Code user-level
-cp -r skills/deepstream-byovm ~/.claude/skills/
+cp -r skills/deepstream-import-vision-model ~/.claude/skills/
 
 # Example: Codex user-level
-cp -r skills/deepstream-byovm ~/.codex/skills/
+cp -r skills/deepstream-import-vision-model ~/.codex/skills/
 
 # Or workspace-level
-cp -r skills/deepstream-byovm <workspace>/.cursor/skills/
+cp -r skills/deepstream-import-vision-model <workspace>/.cursor/skills/
 ```
 
 After copying:
 
 ```text
 <skills-directory>/
-└── deepstream-byovm/
+└── deepstream-import-vision-model/
     ├── SKILL.md            # Top-level skill definition + critical rules
     ├── references/         # 4 phase references (model-acquire, engine-build, pipeline-run, report-generation)
     └── scripts/            # Helpers: model/, engine/, deepstream/, report/
@@ -235,7 +235,7 @@ After copying:
 2. Ask:
 
    ```text
-   Use deepstream-byovm to onboard and benchmark this detection model
+   Use deepstream-import-vision-model to onboard and benchmark this detection model
    end-to-end, and produce the PDF benchmark report:
    https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/rtdetr_2d_warehouse
 
@@ -246,7 +246,7 @@ After copying:
    In Cursor:
 
    ```text
-   @deepstream-byovm onboard and benchmark this detection model end-to-end,
+   @deepstream-import-vision-model onboard and benchmark this detection model end-to-end,
    and produce the PDF benchmark report:
    https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/rtdetr_2d_warehouse
 
@@ -254,9 +254,9 @@ After copying:
    /opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.mp4.
    ```
 
-   For an interactive variant that prompts for inputs with defaults, see [`example_prompts/byovm_detection_pipeline.md`](example_prompts/byovm_detection_pipeline.md).
+   For an interactive variant that prompts for inputs with defaults, see [`example_prompts/import_vision_model_detection_pipeline.md`](example_prompts/import_vision_model_detection_pipeline.md).
 
-3. The agent should activate `deepstream-byovm`, run pre-flight checks (`nvidia-smi`, `trtexec`, `wkhtmltopdf`, `mediainfo`, `deepstream-app`), and proceed through Steps 1–8 without further prompting.
+3. The agent should activate `deepstream-import-vision-model`, run pre-flight checks (`nvidia-smi`, `trtexec`, `wkhtmltopdf`, `mediainfo`, `deepstream-app`), and proceed through Steps 1–8 without further prompting.
 
 #### Output structure
 

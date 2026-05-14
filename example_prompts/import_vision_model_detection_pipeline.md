@@ -1,4 +1,4 @@
-Use deepstream-byovm to onboard an object detection model end-to-end: from acquisition and engine build through performance benchmarking and report generation.
+Use deepstream-import-vision-model to onboard an object detection model end-to-end: from acquisition and engine build through performance benchmarking and report generation.
 
 Before starting, prompt me for the following inputs. For each prompt, I will either provide a value or reply `y` (or `Y`) to accept the default shown in brackets:
 

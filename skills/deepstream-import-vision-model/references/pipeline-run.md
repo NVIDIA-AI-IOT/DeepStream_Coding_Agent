@@ -8,7 +8,7 @@ The model directory is: `$ARGUMENTS`
 ## Pre-flight: Extract Variables
 
 ```bash
-[ -z "$ARGUMENTS" ] && { echo "ERROR: No model directory provided. Usage: /deepstream-byovm models/<model_name>/"; exit 1; }
+[ -z "$ARGUMENTS" ] && { echo "ERROR: No model directory provided. Usage: /deepstream-import-vision-model models/<model_name>/"; exit 1; }
 MODEL_DIR="${ARGUMENTS%/}"
 MODEL_NAME=$(basename "$MODEL_DIR")
 
@@ -33,7 +33,7 @@ print(round(imgs, 2), int(math.floor(imgs / 30)))
 ")
 
 # Read spatial dimensions from ONNX inspection
-INSPECT_OUT=$(python3 skills/deepstream-byovm/scripts/model/inspect-onnx.py "$ONNX_FILE")
+INSPECT_OUT=$(python3 skills/deepstream-import-vision-model/scripts/model/inspect-onnx.py "$ONNX_FILE")
 INPUT_NAME=$(echo "$INSPECT_OUT" | grep -oP 'input_name:\s*\K\S+')
 H=$(echo "$INSPECT_OUT"          | grep -oP 'height:\s*\K[0-9]+')
 W=$(echo "$INSPECT_OUT"          | grep -oP 'width:\s*\K[0-9]+')
@@ -248,7 +248,7 @@ echo "labels.txt: $NUM_LABELS classes -> num-detected-classes=$NUM_LABELS"
 > Primary encoder is `nvv4l2h264enc` (NVENC via V4L2) → `.mp4`. `x264enc` and `openh264enc` are **prohibited**.
 > On systems where `/dev/v4l2-nvenc` is unavailable, the approved fallback is `theoraenc + oggmux`
 > (LGPL; both ship in gst-plugins-base) → `.ogv`. If `theoraenc`/`oggmux` are absent, video creation is skipped.
-> Use `skills/deepstream-byovm/scripts/deepstream/ds-single-stream.sh` which handles this automatically
+> Use `skills/deepstream-import-vision-model/scripts/deepstream/ds-single-stream.sh` which handles this automatically
 > and emits a `DS_SINGLE_STREAM_MODE=` marker the report parser reads.
 
 **Primary (NVENC available):**
@@ -320,7 +320,7 @@ Run a KITTI dump to confirm detections exist before multi-stream benchmarks.
 ```bash
 mkdir -p models/$MODEL_NAME/samples/kitti_output
 
-bash skills/deepstream-byovm/scripts/deepstream/ds-kitti-dump.sh \
+bash skills/deepstream-import-vision-model/scripts/deepstream/ds-kitti-dump.sh \
   models/$MODEL_NAME/config/config_infer_primary_${MODEL_NAME}.txt \
   models/$MODEL_NAME/samples/kitti_output \
   100 \
@@ -420,7 +420,7 @@ Every pipeline stage must be separated by `queue` elements. Use `leaky=downstrea
 
 Only **2 DS pipeline runs** characterise DS overhead vs trtexec.
 
-Both runs go through `deepstream-app` with `[application] enable-perf-measurement=1` (wrapped by `skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh`). FPS is parsed from the canonical `**PERF:` lines DeepStream emits at the configured measurement interval. This replaces the older `gst-launch-1.0 ... ! fpsdisplaysink` path so the runtime no longer depends on `gstreamer1.0-plugins-bad`.
+Both runs go through `deepstream-app` with `[application] enable-perf-measurement=1` (wrapped by `skills/deepstream-import-vision-model/scripts/deepstream/ds-perf-run.sh`). FPS is parsed from the canonical `**PERF:` lines DeepStream emits at the configured measurement interval. This replaces the older `gst-launch-1.0 ... ! fpsdisplaysink` path so the runtime no longer depends on `gstreamer1.0-plugins-bad`.
 
 > **PERF line format**: `**PERF: <fps_run> (<fps_avg>)` — one float per active source. The helper script averages the per-stream instantaneous FPS across the last few measurement windows; the parser below mirrors that contract.
 
@@ -428,7 +428,7 @@ Both runs go through `deepstream-app` with `[application] enable-perf-measuremen
 
 > **CRITICAL**: Use `$PEAK_GPU_STREAMS` directly. Do NOT pre-apply any efficiency discount (no ×0.6, ×0.7, etc.). Run 1 *measures* the real overhead — do not guess it.
 
-> Log filenames are **fixed** — no timestamp variation. Always `ds_s${N}_run1.log` and `ds_s${N}_run2.log` in `benchmarks/ds/`. The nv-byovm-report skill reads these exact paths.
+> Log filenames are **fixed** — no timestamp variation. Always `ds_s${N}_run1.log` and `ds_s${N}_run2.log` in `benchmarks/ds/`. The nv-import-vision-model-report skill reads these exact paths.
 
 ```bash
 # Hard constraint: num_streams <= engine max batch size — always
@@ -436,7 +436,7 @@ N=$(python3 -c "print(min($PEAK_GPU_STREAMS, $MAX_BS))")
 LOG_RUN1="models/$MODEL_NAME/benchmarks/ds/ds_s${N}_run1.log"
 
 STEP7_RUN1_START=$(date +%s.%N)
-bash skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh \
+bash skills/deepstream-import-vision-model/scripts/deepstream/ds-perf-run.sh \
   models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
   "$N" \
   "$LOG_RUN1" \
@@ -461,7 +461,7 @@ N=$RT_STREAMS
 LOG_RUN2="models/$MODEL_NAME/benchmarks/ds/ds_s${N}_run2.log"
 
 STEP7_RUN2_START=$(date +%s.%N)
-bash skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh \
+bash skills/deepstream-import-vision-model/scripts/deepstream/ds-perf-run.sh \
   models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
   "$N" \
   "$LOG_RUN2" \
@@ -489,7 +489,7 @@ if [ "$RT_CONFIRMED" = "NO" ]; then
   echo "Run 2 not real-time — retrying at $RT_STREAMS streams"
   N=$RT_STREAMS
   LOG_RUN2="models/$MODEL_NAME/benchmarks/ds/ds_s${N}_run2.log"
-  bash skills/deepstream-byovm/scripts/deepstream/ds-perf-run.sh \
+  bash skills/deepstream-import-vision-model/scripts/deepstream/ds-perf-run.sh \
     models/$MODEL_NAME/benchmarks/ds/config_infer_ds_${MODEL_NAME}.txt \
     "$N" \
     "$LOG_RUN2" \

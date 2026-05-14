@@ -1,5 +1,5 @@
 ---
-name: deepstream-byovm
+name: deepstream-import-vision-model
 description: >
   Use this skill to bring any vision model from HuggingFace or NVIDIA NGC into
   an NVIDIA DeepStream pipeline with end-to-end automation: ONNX download,
@@ -11,7 +11,7 @@ metadata:
   version: 1.2.1
 ---
 
-# DeepStream BYOVM — Bring Your Own Vision Model
+# DeepStream Import Vision Model
 
 When this skill is active, **read the relevant reference document before starting each phase**. Do not rely on memory — reference documents contain exact script paths, bash variable conventions, log filename contracts, and critical parsing rules.
 
@@ -96,7 +96,7 @@ mkdir -p models/$MODEL_NAME/{model,parser,config,scripts,benchmarks/engines,benc
 5. **KITTI validation gate** — do NOT proceed to Step 7 if KITTI frame count is zero or detection rate < 90%.
 6. **Shared venv** — `build/.venv_optimum` reused across all models. Never create per-model venvs.
 7. **trtexec `--noDataTransfers`** — GPU-only compute matches DeepStream's GPU-to-GPU data flow.
-8. **Report HTML+PDF** — always use `skills/deepstream-byovm/scripts/report/md-to-html-pdf.py`. Never write a custom HTML generator or call `wkhtmltopdf` directly.
+8. **Report HTML+PDF** — always use `skills/deepstream-import-vision-model/scripts/report/md-to-html-pdf.py`. Never write a custom HTML generator or call `wkhtmltopdf` directly.
 9. **Object detection only** — reject non-detection architectures from `config.json` before building anything.
 10. **Encoder fallback (MANDATORY)** — `x264enc` and `openh264enc` are **prohibited**. On NVENC-unavailable systems, use `theoraenc + oggmux` (LGPL; ships in gst-plugins-base; output is `.ogv`). If `theoraenc`/`oggmux` are absent, skip video creation (`DS_SINGLE_STREAM_MODE=skipped`). Report which mode was used: `nvv4l2h264enc` / `theoraenc-fallback` / `skipped`.
 11. **Video source (MANDATORY)** — default is always `sample_720p.mp4` (1280×720). Never autonomously substitute `sample_1080p_h264.mp4` or any other file. Only use a different video when the user explicitly provides a path (via `DS_VIDEO` env var or script argument).

@@ -44,7 +44,7 @@ If the ONNX file doesn't exist, inform the user to run Steps 1-3 first (see refe
 
 Inspect the ONNX model and auto-parse input name and spatial dimensions:
 ```bash
-INSPECT_OUT=$(python3 skills/deepstream-byovm/scripts/model/inspect-onnx.py "$ONNX_PATH")
+INSPECT_OUT=$(python3 skills/deepstream-import-vision-model/scripts/model/inspect-onnx.py "$ONNX_PATH")
 echo "$INSPECT_OUT"
 
 INPUT_NAME=$(echo "$INSPECT_OUT" | grep -oP 'input_name:\s*\K\S+')
@@ -110,7 +110,7 @@ STEP5_START=$(date +%s.%N)
 
 ### Run 5a — Latency baseline (BS=1)
 
-> Log filename is **fixed** — no timestamp, no variation. Always `trtexec_b1.log`. This ensures the nv-byovm-report skill can find it with an exact path, not a wildcard.
+> Log filename is **fixed** — no timestamp, no variation. Always `trtexec_b1.log`. This ensures the nv-import-vision-model-report skill can find it with an exact path, not a wildcard.
 
 ```bash
 $TRTEXEC \

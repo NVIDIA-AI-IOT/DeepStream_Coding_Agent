@@ -1,5 +1,5 @@
 
-# NV BYOVM Report -- Step 8
+# NV Import Vision Model Report -- Step 8
 
 Generate benchmark report with charts, HTML, and PDF from completed benchmarks.
 
@@ -11,9 +11,9 @@ The model directory is: `$ARGUMENTS`
 >
 > **The ONLY permitted way to generate the HTML + PDF:**
 > ```bash
-> python3 skills/deepstream-byovm/scripts/report/md-to-html-pdf.py \
+> python3 skills/deepstream-import-vision-model/scripts/report/md-to-html-pdf.py \
 >   models/$MODEL_NAME/reports/benchmark_report.md \
->   skills/deepstream-byovm/scripts/report/report-style.css \
+>   skills/deepstream-import-vision-model/scripts/report/report-style.css \
 >   models/$MODEL_NAME/reports/ \
 >   $MODEL_NAME
 > ```
@@ -35,7 +35,7 @@ The report must contain exactly these 12 sections in order:
 
 1. **Model Configuration** — model name, source (HF repo / NGC), architecture, ONNX source, input/output shapes, classes, custom parser name, cluster mode, precision, engine profile
 2. **System Configuration** — GPU (name + VRAM), Driver, CUDA, TensorRT, DeepStream, OS, Python, PyTorch, ONNX versions
-3. **Preprocessing** — net-scale-factor, offsets, color format, normalization details (with reference to the preprocessing table in deepstream-byovm/SKILL.md)
+3. **Preprocessing** — net-scale-factor, offsets, color format, normalization details (with reference to the preprocessing table in deepstream-import-vision-model/SKILL.md)
 4. **Engine Build Summary** — source format, conversion path, engine filename (with max_bs postfix), engine size (MB), FP16 flag, builder_optimization_level if non-default, timing cache path
 5. **trtexec Results** — two runs (BS=1 and BS=MAX_BS) with: QPS, Images/s, GPU Compute mean/P99 (ms). Do NOT include H2D/D2H latency or Host Latency. Show PEAK_GPU_STREAMS derivation:
    ```
@@ -89,7 +89,7 @@ echo "Using engine: $ENGINE (MAX_BS=$MAX_BS)"
 # Extract input name and spatial dims from ONNX (needed for reference commands in the report)
 ONNX_FILE=$(ls models/$MODEL_NAME/model/*.onnx 2>/dev/null | grep -v '_dynamic' | head -1)
 if [ -n "$ONNX_FILE" ]; then
-  INSPECT_OUT=$(python3 skills/deepstream-byovm/scripts/model/inspect-onnx.py "$ONNX_FILE" 2>/dev/null)
+  INSPECT_OUT=$(python3 skills/deepstream-import-vision-model/scripts/model/inspect-onnx.py "$ONNX_FILE" 2>/dev/null)
   INPUT_NAME=$(echo "$INSPECT_OUT" | grep -oP 'input_name:\s*\K\S+')
   H=$(echo "$INSPECT_OUT" | grep -oP 'height:\s*\K[0-9]+')
   W=$(echo "$INSPECT_OUT" | grep -oP 'width:\s*\K[0-9]+')
@@ -213,7 +213,7 @@ All Python scripts in this step run inside the **shared venv** at `build/.venv_o
 source build/.venv_optimum/bin/activate
 ```
 
-Generate exactly **5 charts** using `matplotlib` in `models/{model_name}/reports/charts/`. Use the script at `skills/deepstream-byovm/scripts/report/generate-benchmark-charts.py` or generate manually. Chart names are fixed — do not rename them.
+Generate exactly **5 charts** using `matplotlib` in `models/{model_name}/reports/charts/`. Use the script at `skills/deepstream-import-vision-model/scripts/report/generate-benchmark-charts.py` or generate manually. Chart names are fixed — do not rename them.
 
 | Filename | Content | Chart type |
 |----------|---------|------------|
@@ -485,9 +485,9 @@ echo "All 5 charts verified OK"
 Then run the canonical pipeline script — this generates BOTH the HTML and PDF correctly:
 
 ```bash
-python3 skills/deepstream-byovm/scripts/report/md-to-html-pdf.py \
+python3 skills/deepstream-import-vision-model/scripts/report/md-to-html-pdf.py \
   models/$MODEL_NAME/reports/benchmark_report.md \
-  skills/deepstream-byovm/scripts/report/report-style.css \
+  skills/deepstream-import-vision-model/scripts/report/report-style.css \
   models/$MODEL_NAME/reports/ \
   $MODEL_NAME
 ```
